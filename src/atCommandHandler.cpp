@@ -46,7 +46,12 @@ void ATCommandHandler::sendRaw(const char *raw) {
 }
 
 void ATCommandHandler::sendRaw(const char *buf, int size) {
-  agSerial_->write(reinterpret_cast<const uint8_t*>(buf), size);
+#ifdef ARDUINO
+  // AgSerial::write takes const char*, AirgradientSerial (ESP-IDF) takes const uint8_t*
+  agSerial_->write(buf, size);
+#else
+  agSerial_->write(reinterpret_cast<const uint8_t *>(buf), size);
+#endif
   agSerial_->print("\r\n");
   AT_YIELD();
 }
