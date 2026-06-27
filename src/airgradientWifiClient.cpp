@@ -48,6 +48,8 @@
 
 #ifdef ARDUINO
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include "common.h"
 #else
 #include "esp_http_client.h"
 #endif
@@ -146,20 +148,41 @@ bool AirgradientWifiClient::httpPostMeasures(const AirgradientPayload &payload) 
 bool AirgradientWifiClient::_httpGet(const std::string &url, int &responseCode,
                                      std::string &responseBody) {
 #ifdef ARDUINO
-  // Init http client
-  HTTPClient client;
-  client.setConnectTimeout(timeoutMs); // Set timeout when establishing connection to server
-  client.setTimeout(timeoutMs);        // Timeout when waiting for response from AG server
-  // By default, airgradient using https
-  if (client.begin(String(url.c_str()), AG_SERVER_ROOT_CA) == false) {
-    AG_LOGE(TAG, "Failed begin HTTPClient using TLS");
+  _ensureSelectorReady();
+  std::string path = _extractPath(url);
+  if (path.empty()) {
+    AG_LOGE(TAG, "Could not extract path from URL: %s", url.c_str());
     return false;
   }
+  const char *host = httpDomain.c_str();
 
-  responseCode = client.GET();
-  responseBody = client.getString().c_str();
-  client.end();
-  return true;
+  // Phase 1: try every resolved IP exactly once, in cursor order. The
+  // cursor stays put on success (sticky) and advances on failure.
+  bool ipsExhausted = false;
+  if (selectorReady_ && selector_.count() > 0) {
+    const uint8_t total = selector_.count();
+    for (uint8_t i = 0; i < total; ++i) {
+      IPAddress ip = selector_.current();
+      if (_httpGetSecure(ip, host, path, responseCode, responseBody)) {
+        return true;
+      }
+      selector_.advance();
+    }
+    ipsExhausted = true;
+    AG_LOGW(TAG, "All %u IP(s) failed; falling back to hostname resolution", total);
+  }
+
+  // Phase 2: hostname fallback. Same WiFiClientSecure + HTTPClient API,
+  // just let WiFiClientSecure do its own DNS resolution.
+  if (_httpGetSecure(IPAddress(static_cast<uint32_t>(0)), host, path, responseCode, responseBody)) {
+    if (ipsExhausted) {
+      AG_LOGI(TAG, "Hostname fallback succeeded after IP exhaustion; refreshing DNS");
+      selector_.refresh();
+    }
+    return true;
+  }
+  AG_LOGE(TAG, "Both IP and hostname paths failed");
+  return false;
 #else
   esp_http_client_config_t config = {};
   config.url = url.c_str();
@@ -196,19 +219,40 @@ bool AirgradientWifiClient::_httpGet(const std::string &url, int &responseCode,
 bool AirgradientWifiClient::_httpPost(const std::string &url, const std::string &payload,
                                       int &responseCode) {
 #ifdef ARDUINO
-  HTTPClient client;
-  client.setConnectTimeout(timeoutMs); // Set timeout when establishing connection to server
-  client.setTimeout(timeoutMs);        // Timeout when waiting for response from AG server
-  // By default, airgradient using https
-  if (client.begin(String(url.c_str()), AG_SERVER_ROOT_CA) == false) {
-    AG_LOGE(TAG, "Failed begin HTTPClient using TLS");
+  _ensureSelectorReady();
+  std::string path = _extractPath(url);
+  if (path.empty()) {
+    AG_LOGE(TAG, "Could not extract path from URL: %s", url.c_str());
     return false;
   }
+  const char *host = httpDomain.c_str();
 
-  client.addHeader("content-type", "application/json");
-  responseCode = client.POST(String(payload.c_str()));
-  client.end();
-  return true;
+  // Phase 1: try every resolved IP exactly once, in cursor order. The
+  // cursor stays put on success (sticky) and advances on failure.
+  bool ipsExhausted = false;
+  if (selectorReady_ && selector_.count() > 0) {
+    const uint8_t total = selector_.count();
+    for (uint8_t i = 0; i < total; ++i) {
+      IPAddress ip = selector_.current();
+      if (_httpPostSecure(ip, host, path, payload, responseCode)) {
+        return true;
+      }
+      selector_.advance();
+    }
+    ipsExhausted = true;
+    AG_LOGW(TAG, "All %u IP(s) failed; falling back to hostname resolution", total);
+  }
+
+  // Phase 2: hostname fallback via the same WiFiClientSecure API.
+  if (_httpPostSecure(IPAddress(static_cast<uint32_t>(0)), host, path, payload, responseCode)) {
+    if (ipsExhausted) {
+      AG_LOGI(TAG, "Hostname fallback succeeded after IP exhaustion; refreshing DNS");
+      selector_.refresh();
+    }
+    return true;
+  }
+  AG_LOGE(TAG, "Both IP and hostname paths failed");
+  return false;
 #else
   esp_http_client_config_t config = {};
   config.url = url.c_str();
@@ -316,5 +360,144 @@ void AirgradientWifiClient::_serialize(JsonDocument &doc, const PayloadBuffer &p
     doc[JSON_PROP_AFE_TEMP] = payload.ext.extra.afeTemp;
   }
 }
+
+#ifdef ARDUINO
+
+bool AirgradientWifiClient::_httpGetSecure(const IPAddress &ip, const char *host,
+                                           const std::string &path, int &responseCode,
+                                           std::string &responseBody) {
+  const bool usingIp = (static_cast<uint32_t>(ip) != 0);
+  // Note: must extend the String lifetime to function scope; cannot use
+  // `ip.toString().c_str()` directly (temporary gets destroyed).
+  String ipStr = usingIp ? ip.toString() : String();
+  const char *target = usingIp ? ipStr.c_str() : host;
+
+  WiFiClientSecure secClient;
+  secClient.setCACert(AG_SERVER_ROOT_CA);
+  // setTimeout() expects seconds.
+  secClient.setTimeout((timeoutMs + 500) / 1000);
+
+  // When we have a selected IP: 6-arg overload connects TCP to `ip` but
+  // SNI + cert verification still use `host`. When we don't: let
+  // WiFiClientSecure resolve `host` itself (which internally calls the
+  // same 6-arg overload with the resolved IP).
+  uint32_t t0 = MILLIS();
+  int connectRet;
+  if (usingIp) {
+    connectRet = secClient.connect(ip, 443, host, AG_SERVER_ROOT_CA, nullptr, nullptr);
+  } else {
+    connectRet = secClient.connect(host, 443, AG_SERVER_ROOT_CA, nullptr, nullptr);
+  }
+  uint32_t connectDt = MILLIS() - t0;
+  if (connectRet != 1) {
+    AG_LOGW(TAG, "TLS connect to %s failed in %ums (ret=%d)", target, connectDt, connectRet);
+    return false;
+  }
+  AG_LOGI(TAG, "TLS up to %s in %ums", target, connectDt);
+
+  HTTPClient client;
+  client.setConnectTimeout(timeoutMs);
+  client.setTimeout(timeoutMs);
+  // begin(WiFiClient&, host, port, uri, https) reuses the already-connected
+  // socket and sets the Host header from `host`.
+  if (client.begin(secClient, host, 443, path.c_str(), true) == false) {
+    AG_LOGE(TAG, "Failed begin HTTPClient on pre-connected client");
+    secClient.stop();
+    return false;
+  }
+
+  responseCode = client.GET();
+  if (responseCode <= 0) {
+    AG_LOGW(TAG, "HTTP GET via %s failed: %d (%s)", target, responseCode,
+            HTTPClient::errorToString(responseCode).c_str());
+    client.end();
+    return false;
+  }
+  responseBody = client.getString().c_str();
+  client.end();
+  return true;
+}
+
+bool AirgradientWifiClient::_httpPostSecure(const IPAddress &ip, const char *host,
+                                            const std::string &path, const std::string &payload,
+                                            int &responseCode) {
+  const bool usingIp = (static_cast<uint32_t>(ip) != 0);
+  String ipStr = usingIp ? ip.toString() : String();
+  const char *target = usingIp ? ipStr.c_str() : host;
+
+  WiFiClientSecure secClient;
+  secClient.setCACert(AG_SERVER_ROOT_CA);
+  secClient.setTimeout((timeoutMs + 500) / 1000);
+
+  uint32_t t0 = MILLIS();
+  int connectRet;
+  if (usingIp) {
+    connectRet = secClient.connect(ip, 443, host, AG_SERVER_ROOT_CA, nullptr, nullptr);
+  } else {
+    connectRet = secClient.connect(host, 443, AG_SERVER_ROOT_CA, nullptr, nullptr);
+  }
+  uint32_t connectDt = MILLIS() - t0;
+  if (connectRet != 1) {
+    AG_LOGW(TAG, "TLS connect to %s failed in %ums (ret=%d)", target, connectDt, connectRet);
+    return false;
+  }
+  AG_LOGI(TAG, "TLS up to %s in %ums", target, connectDt);
+
+  HTTPClient client;
+  client.setConnectTimeout(timeoutMs);
+  client.setTimeout(timeoutMs);
+  if (client.begin(secClient, host, 443, path.c_str(), true) == false) {
+    AG_LOGE(TAG, "Failed begin HTTPClient on pre-connected client");
+    secClient.stop();
+    return false;
+  }
+  client.addHeader("content-type", "application/json");
+
+  responseCode = client.POST(String(payload.c_str()));
+  if (responseCode <= 0) {
+    AG_LOGW(TAG, "HTTP POST via %s failed: %d (%s)", target, responseCode,
+            HTTPClient::errorToString(responseCode).c_str());
+    client.end();
+    return false;
+  }
+  client.end();
+  return true;
+}
+
+void AirgradientWifiClient::_ensureSelectorReady() {
+  // Re-initialize on first call or if the domain changed at runtime
+  // (e.g. setHttpDomain() was called by the application).
+  bool domainChanged = (selectorHost_ != httpDomain);
+
+  if (!selectorReady_ || domainChanged) {
+    if (domainChanged && selectorReady_) {
+      AG_LOGI(TAG, "HTTP domain changed (%s -> %s); re-initializing selector",
+              selectorHost_.c_str(), httpDomain.c_str());
+    }
+    selectorReady_ = selector_.begin(httpDomain.c_str());
+    if (selectorReady_) {
+      selectorHost_ = httpDomain;
+    } else {
+      AG_LOGW(TAG, "Selector init failed for %s; will use domain-based path only",
+              httpDomain.c_str());
+    }
+    return;
+  }
+
+  // Periodic refresh (1h default). No-op if interval not yet elapsed.
+  selector_.maybeRefresh(MILLIS());
+}
+
+std::string AirgradientWifiClient::_extractPath(const std::string &url) const {
+  // Expected format: "https://<httpDomain>/<path>". We strip the prefix
+  // strictly so we don't accidentally hit a wrong path on malformed URLs.
+  std::string prefix = "https://" + httpDomain;
+  if (url.compare(0, prefix.size(), prefix) != 0) {
+    return std::string();
+  }
+  return url.substr(prefix.size());
+}
+
+#endif // ARDUINO
 
 #endif // ESP8266

@@ -2,6 +2,7 @@ set(srcs
   "src/airgradientClient.cpp"
   "src/airgradientCellularClient.cpp"
   "src/airgradientWifiClient.cpp"
+  "src/endpointSelector.cpp"
   "src/atCommandHandler.cpp"
   "src/cellularModule.cpp"
   "src/cellularModuleA7672xx.cpp"
