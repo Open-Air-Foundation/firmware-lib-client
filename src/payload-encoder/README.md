@@ -140,8 +140,6 @@ When setting sensor values, apply these scaling factors:
 - `src/payload_types.h` - Type definitions and constants
 - `src/payload_encoder.h` - Encoder class declaration
 - `src/payload_encoder.cpp` - Encoder implementation
-- `examples/demo.cpp` - Example usage
-- `test/` - Unit tests
 
 ## License
 
