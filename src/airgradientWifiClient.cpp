@@ -187,7 +187,7 @@ bool AirgradientWifiClient::_httpGet(const std::string &url, int &responseCode,
   esp_http_client_config_t config = {};
   config.url = url.c_str();
   config.method = HTTP_METHOD_GET;
-  config.cert_pem = AG_SERVER_ROOT_CA;
+  config.cert_pem = AirgradientServerConfig::AG_SERVER_ROOT_CA;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
 
@@ -257,7 +257,7 @@ bool AirgradientWifiClient::_httpPost(const std::string &url, const std::string 
   esp_http_client_config_t config = {};
   config.url = url.c_str();
   config.method = HTTP_METHOD_POST;
-  config.cert_pem = AG_SERVER_ROOT_CA;
+  config.cert_pem = AirgradientServerConfig::AG_SERVER_ROOT_CA;
   config.timeout_ms = timeoutMs;
   esp_http_client_handle_t client = esp_http_client_init(&config);
 
@@ -373,7 +373,7 @@ bool AirgradientWifiClient::_httpGetSecure(const IPAddress &ip, const char *host
   const char *target = usingIp ? ipStr.c_str() : host;
 
   WiFiClientSecure secClient;
-  secClient.setCACert(AG_SERVER_ROOT_CA);
+  secClient.setCACert(AirgradientServerConfig::AG_SERVER_ROOT_CA);
   // setTimeout() expects seconds.
   secClient.setTimeout((timeoutMs + 500) / 1000);
 
@@ -384,9 +384,11 @@ bool AirgradientWifiClient::_httpGetSecure(const IPAddress &ip, const char *host
   uint32_t t0 = MILLIS();
   int connectRet;
   if (usingIp) {
-    connectRet = secClient.connect(ip, 443, host, AG_SERVER_ROOT_CA, nullptr, nullptr);
+    connectRet = secClient.connect(ip, 443, host, AirgradientServerConfig::AG_SERVER_ROOT_CA,
+                                   nullptr, nullptr);
   } else {
-    connectRet = secClient.connect(host, 443, AG_SERVER_ROOT_CA, nullptr, nullptr);
+    connectRet = secClient.connect(host, 443, AirgradientServerConfig::AG_SERVER_ROOT_CA, nullptr,
+                                   nullptr);
   }
   uint32_t connectDt = MILLIS() - t0;
   if (connectRet != 1) {
@@ -426,15 +428,17 @@ bool AirgradientWifiClient::_httpPostSecure(const IPAddress &ip, const char *hos
   const char *target = usingIp ? ipStr.c_str() : host;
 
   WiFiClientSecure secClient;
-  secClient.setCACert(AG_SERVER_ROOT_CA);
+  secClient.setCACert(AirgradientServerConfig::AG_SERVER_ROOT_CA);
   secClient.setTimeout((timeoutMs + 500) / 1000);
 
   uint32_t t0 = MILLIS();
   int connectRet;
   if (usingIp) {
-    connectRet = secClient.connect(ip, 443, host, AG_SERVER_ROOT_CA, nullptr, nullptr);
+    connectRet = secClient.connect(ip, 443, host, AirgradientServerConfig::AG_SERVER_ROOT_CA,
+                                   nullptr, nullptr);
   } else {
-    connectRet = secClient.connect(host, 443, AG_SERVER_ROOT_CA, nullptr, nullptr);
+    connectRet = secClient.connect(host, 443, AirgradientServerConfig::AG_SERVER_ROOT_CA, nullptr,
+                                   nullptr);
   }
   uint32_t connectDt = MILLIS() - t0;
   if (connectRet != 1) {
