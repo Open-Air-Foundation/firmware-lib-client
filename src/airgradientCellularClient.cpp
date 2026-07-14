@@ -135,6 +135,8 @@ std::string AirgradientCellularClient::getICCID() { return _iccid; }
 
 bool AirgradientCellularClient::ensureClientConnection(bool reset) {
   AG_LOGI(TAG, "Ensuring client connection, restarting cellular module");
+  _isCoapConnected = false;
+
   if (reset) {
     if (cell_->reset() == false) {
       AG_LOGW(TAG, "Reset failed, power cycle module...");
@@ -376,6 +378,8 @@ std::string AirgradientCellularClient::coapFetchConfig(bool keepConnection) {
                  .buildBuffer(buffer);
   if (err != CoapPacket::CoapError::OK) {
     AG_LOGE(TAG, "CoAP fetch config packet build failed %s", CoapPacket::getErrorMessage(err));
+    lastFetchConfigSucceed = false;
+    _coapDisconnect(keepConnection);
     return {};
   }
 
@@ -386,6 +390,7 @@ std::string AirgradientCellularClient::coapFetchConfig(bool keepConnection) {
   bool success = _coapRequestWithRetry(buffer, messageId, token, 2, &responsePacket);
   if (!success) {
     lastFetchConfigSucceed = false;
+    _coapDisconnect(keepConnection);
     return {};
   }
 
@@ -399,6 +404,7 @@ std::string AirgradientCellularClient::coapFetchConfig(bool keepConnection) {
       registeredOnAgServer = false;
     }
     lastFetchConfigSucceed = false;
+    _coapDisconnect(keepConnection);
     return {};
   }
 
@@ -600,8 +606,8 @@ void AirgradientCellularClient::_coapDisconnect(bool keepConnection) {
   }
 
   AG_LOGI(TAG, "Failed disconnect to CoAP server");
-  _isCoapConnected = true;
-  // TODO: Do a force disconnection or something
+  _isCoapConnected = false;
+  clientReady = false;
 }
 
 CellReturnStatus AirgradientCellularClient::_coapRequest(
