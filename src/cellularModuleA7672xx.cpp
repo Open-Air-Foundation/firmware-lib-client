@@ -1481,7 +1481,8 @@ CellReturnStatus CellularModuleA7672XX::_applyOperatorSelection(uint32_t operato
     AG_LOGW(TAG, "Timeout to apply operator selection");
     return CellReturnStatus::Timeout;
   }
-  else if (result == ATCommandHandler::ExpArg2) {
+  // Only "OK" is success; plain ERROR and +CME/+CMS ERROR both mean failure.
+  else if (result != ATCommandHandler::ExpArg1) {
     AG_LOGW(TAG, "Error to apply operator selection");
     return CellReturnStatus::Error;
   }
