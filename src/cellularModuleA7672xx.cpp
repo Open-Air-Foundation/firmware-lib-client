@@ -358,8 +358,9 @@ CellularModuleA7672XX::startNetworkRegistration(CellTechnology ct, const std::st
       DELAY_MS(10000);
       reinitialize();
 
-      // Haven't reached max attempts yet, reset index start over
-      AG_LOGI(TAG, "Resetting operator index to retry from beginning");
+      // Haven't reached max attempts yet, reset state to start over.
+      AG_LOGI(TAG, "Resetting operator state to retry from beginning");
+      currentOperatorId_ = 0;
       currentOperatorIndex_ = 0;
       state = CHECK_MODULE_READY;
       break;
