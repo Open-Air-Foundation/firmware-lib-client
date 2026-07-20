@@ -313,6 +313,12 @@ CellularModuleA7672XX::startNetworkRegistration(CellTechnology ct, const std::st
 
     case SCAN_OPERATOR:
       state = _implScanOperator(scanTimeoutMs);
+      // Exclude scan time (up to scanTimeoutMs) from the operation budget:
+      // restart the timer so operators get the full operationTimeoutMs.
+      if (state == CONFIGURE_MANUAL_NETWORK) {
+        startOperationTime = MILLIS();
+        AG_LOGI(TAG, "Scan complete, restarting operation timer for registration");
+      }
       break;
 
     case CONFIGURE_MANUAL_NETWORK:
