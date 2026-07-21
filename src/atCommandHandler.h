@@ -138,6 +138,19 @@ public:
                         const char *expArg3 = nullptr);
 
   /**
+   * @brief Collect a complete AT response into a caller-provided buffer
+   *
+   * Reads response data until a terminal OK/error response or timeout. The
+   * received buffer is null-terminated when memorySize is greater than zero.
+   *
+   * @param received buffer where the response will be placed
+   * @param memorySize size of the received buffer
+   * @param timeoutMs how long to wait for a terminal response
+   * @return Response response enum member
+   */
+  Response waitResponseAndCollect(char *received, int memorySize, uint32_t timeoutMs);
+
+  /**
    * @brief receive the rest of response on rx buffer until linebreak
    *
    * ```

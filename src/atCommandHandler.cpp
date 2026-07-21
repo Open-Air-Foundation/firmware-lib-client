@@ -103,6 +103,69 @@ ATCommandHandler::Response ATCommandHandler::waitResponse(const char *expArg1, c
   return waitResponse(DEFAULT_WAIT_RESPONSE_TIMEOUT, expArg1, expArg2, expArg3);
 }
 
+ATCommandHandler::Response ATCommandHandler::waitResponseAndCollect(char *received, int memorySize,
+                                                                     uint32_t timeoutMs) {
+  if (received == nullptr || memorySize <= 0) {
+    return CMxError;
+  }
+
+  memset(received, 0, memorySize);
+  char linePrefix[32] = {0};
+  size_t lineLength = 0;
+  size_t receivedLength = 0;
+  bool overflow = false;
+  uint32_t waitStartTime = MILLIS();
+
+  do {
+    while (agSerial_->available()) {
+      char b = agSerial_->read();
+      if (receivedLength + 1 < static_cast<size_t>(memorySize)) {
+        received[receivedLength++] = b;
+        received[receivedLength] = '\0';
+      } else {
+        overflow = true;
+      }
+
+      if (lineLength < sizeof(linePrefix) - 1) {
+        linePrefix[lineLength] = b;
+        linePrefix[lineLength + 1] = '\0';
+      }
+      lineLength++;
+
+      if (b == '\n') {
+        bool isOk = lineLength == sizeof(RESP_AT_OK) - 1 &&
+                    strcmp(linePrefix, RESP_AT_OK) == 0;
+        bool isError = lineLength == sizeof(RESP_AT_ERROR) - 1 &&
+                       strcmp(linePrefix, RESP_AT_ERROR) == 0;
+        bool isCmxError = strncmp(linePrefix, RESP_ERROR_CME, strlen(RESP_ERROR_CME)) == 0 ||
+                          strncmp(linePrefix, RESP_ERROR_CMS, strlen(RESP_ERROR_CMS)) == 0;
+
+        if (isOk || isError || isCmxError) {
+          if (isCmxError) {
+            AG_LOGW(TAG, "CMx error message: %s", linePrefix);
+          }
+          if (overflow) {
+            AG_LOGW(TAG, "AT response buffer overflow");
+            return CMxError;
+          }
+          return isOk ? ExpArg1 : (isError ? ExpArg2 : CMxError);
+        }
+
+        lineLength = 0;
+        linePrefix[0] = '\0';
+      }
+    }
+
+    DELAY_MS(10);
+  } while ((MILLIS() - waitStartTime) < timeoutMs);
+
+  if (overflow) {
+    AG_LOGW(TAG, "AT response buffer overflow");
+    return CMxError;
+  }
+  return Timeout;
+}
+
 int ATCommandHandler::waitAndRecvRespLine(char *received, int memorySize, uint32_t timeoutMs,
                                           bool excludeWhitespace) {
   int idx = 0;
