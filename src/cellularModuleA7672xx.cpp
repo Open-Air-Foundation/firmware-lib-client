@@ -12,6 +12,7 @@
 #include "cellularModuleA7672xx.h"
 #include <cstdint>
 #include <memory>
+#include <new>
 #include <cstring>
 
 #include "common.h"
@@ -313,6 +314,12 @@ CellularModuleA7672XX::startNetworkRegistration(CellTechnology ct, const std::st
 
     case SCAN_OPERATOR:
       state = _implScanOperator(scanTimeoutMs);
+      // Exclude scan time (up to scanTimeoutMs) from the operation budget:
+      // restart the timer so operators get the full operationTimeoutMs.
+      if (state == CONFIGURE_MANUAL_NETWORK) {
+        startOperationTime = MILLIS();
+        AG_LOGI(TAG, "Scan complete, restarting operation timer for registration");
+      }
       break;
 
     case CONFIGURE_MANUAL_NETWORK:
@@ -352,8 +359,9 @@ CellularModuleA7672XX::startNetworkRegistration(CellTechnology ct, const std::st
       DELAY_MS(10000);
       reinitialize();
 
-      // Haven't reached max attempts yet, reset index start over
-      AG_LOGI(TAG, "Resetting operator index to retry from beginning");
+      // Haven't reached max attempts yet, reset state to start over.
+      AG_LOGI(TAG, "Resetting operator state to retry from beginning");
+      currentOperatorId_ = 0;
       currentOperatorIndex_ = 0;
       state = CHECK_MODULE_READY;
       break;
@@ -1475,7 +1483,8 @@ CellReturnStatus CellularModuleA7672XX::_applyOperatorSelection(uint32_t operato
     AG_LOGW(TAG, "Timeout to apply operator selection");
     return CellReturnStatus::Timeout;
   }
-  else if (result == ATCommandHandler::ExpArg2) {
+  // Only "OK" is success; plain ERROR and +CME/+CMS ERROR both mean failure.
+  else if (result != ATCommandHandler::ExpArg1) {
     AG_LOGW(TAG, "Error to apply operator selection");
     return CellReturnStatus::Error;
   }
@@ -1585,23 +1594,23 @@ CellularModuleA7672XX::_scanAvailableOperators(uint32_t timeoutMs) {
   result.status = CellReturnStatus::Timeout;
 
   AG_LOGI(TAG, "Scanning available operators (this may take up to 10 minutes)...");
-  at_->sendAT("+COPS=?");
+  // Read the complete scan response before sending another command.
+  constexpr int OPERATOR_LIST_BUFFER_LENGTH = 2000;
+  std::unique_ptr<char[]> operatorListBuffer(
+      new (std::nothrow) char[OPERATOR_LIST_BUFFER_LENGTH]);
+  if (!operatorListBuffer) {
+    AG_LOGW(TAG, "Failed to allocate operator list buffer");
+    result.status = CellReturnStatus::Error;
+    return result;
+  }
 
-  // Wait for response with long timeout (operator scan can take many minutes)
-  if (at_->waitResponse(timeoutMs, "+COPS:") != ATCommandHandler::ExpArg1) {
+  at_->sendAT("+COPS=?");
+  if (at_->waitResponseAndCollect(operatorListBuffer.get(), OPERATOR_LIST_BUFFER_LENGTH, timeoutMs) !=
+      ATCommandHandler::ExpArg1) {
     AG_LOGW(TAG, "Timeout or error scanning operators");
     return result;
   }
-
-  // Retrieve the full operator list response
-  std::string operatorListRaw;
-  if (at_->waitAndRecvRespLine(operatorListRaw, 2000) == -1) {
-    AG_LOGW(TAG, "Failed to retrieve operator list");
-    return result;
-  }
-
-  // Wait for OK
-  at_->waitResponse();
+  std::string operatorListRaw(operatorListBuffer.get());
 
   AG_LOGD(TAG, "Operator scan response: %s", operatorListRaw.c_str());
 
