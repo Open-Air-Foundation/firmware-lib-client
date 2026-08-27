@@ -104,7 +104,7 @@ ATCommandHandler::Response ATCommandHandler::waitResponse(const char *expArg1, c
 }
 
 ATCommandHandler::Response ATCommandHandler::waitResponseAndCollect(char *received, int memorySize,
-                                                                     uint32_t timeoutMs) {
+                                                                    uint32_t timeoutMs) {
   if (received == nullptr || memorySize <= 0) {
     return CMxError;
   }
@@ -133,10 +133,9 @@ ATCommandHandler::Response ATCommandHandler::waitResponseAndCollect(char *receiv
       lineLength++;
 
       if (b == '\n') {
-        bool isOk = lineLength == sizeof(RESP_AT_OK) - 1 &&
-                    strcmp(linePrefix, RESP_AT_OK) == 0;
-        bool isError = lineLength == sizeof(RESP_AT_ERROR) - 1 &&
-                       strcmp(linePrefix, RESP_AT_ERROR) == 0;
+        bool isOk = lineLength == sizeof(RESP_AT_OK) - 1 && strcmp(linePrefix, RESP_AT_OK) == 0;
+        bool isError =
+            lineLength == sizeof(RESP_AT_ERROR) - 1 && strcmp(linePrefix, RESP_AT_ERROR) == 0;
         bool isCmxError = strncmp(linePrefix, RESP_ERROR_CME, strlen(RESP_ERROR_CME)) == 0 ||
                           strncmp(linePrefix, RESP_ERROR_CMS, strlen(RESP_ERROR_CMS)) == 0;
 
