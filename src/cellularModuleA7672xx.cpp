@@ -66,6 +66,7 @@ bool CellularModuleA7672XX::init() {
   if (!at_->testAT()) {
     AG_LOGW(TAG, "Failed wait cellular module to ready");
     delete at_;
+    at_ = nullptr;
     return false;
   }
 
@@ -1588,9 +1589,9 @@ CellReturnStatus CellularModuleA7672XX::_activatePDPContext() {
   return CellReturnStatus::Ok;
 }
 
-CellResult<std::vector<CellularModuleA7672XX::OperatorInfo>>
-CellularModuleA7672XX::_scanAvailableOperators(uint32_t timeoutMs) {
-  CellResult<std::vector<OperatorInfo>> result;
+CellResult<std::vector<CellularModule::OperatorRecord>>
+CellularModuleA7672XX::scanAvailableOperators(uint32_t timeoutMs) {
+  CellResult<std::vector<CellularModule::OperatorRecord>> result;
   result.status = CellReturnStatus::Timeout;
 
   AG_LOGI(TAG, "Scanning available operators (this may take up to 10 minutes)...");
@@ -1605,9 +1606,15 @@ CellularModuleA7672XX::_scanAvailableOperators(uint32_t timeoutMs) {
   }
 
   at_->sendAT("+COPS=?");
-  if (at_->waitResponseAndCollect(operatorListBuffer.get(), OPERATOR_LIST_BUFFER_LENGTH, timeoutMs) !=
-      ATCommandHandler::ExpArg1) {
-    AG_LOGW(TAG, "Timeout or error scanning operators");
+  ATCommandHandler::Response response =
+      at_->waitResponseAndCollect(operatorListBuffer.get(), OPERATOR_LIST_BUFFER_LENGTH, timeoutMs);
+  if (response != ATCommandHandler::ExpArg1) {
+    if (response == ATCommandHandler::Timeout) {
+      AG_LOGW(TAG, "Operator scan timed out");
+    } else {
+      AG_LOGW(TAG, "Error scanning operators");
+      result.status = CellReturnStatus::Error;
+    }
     return result;
   }
   std::string operatorListRaw(operatorListBuffer.get());
@@ -1616,7 +1623,7 @@ CellularModuleA7672XX::_scanAvailableOperators(uint32_t timeoutMs) {
 
   // Parse operator list: (status,"long","short","numeric",tech),(status,...),...
   // We want to extract "numeric" IDs and tech where status is 1 (available) or 2 (current)
-  std::vector<OperatorInfo> operators;
+  std::vector<CellularModule::OperatorRecord> operators;
   size_t pos = 0;
 
   while (pos < operatorListRaw.length()) {
@@ -1668,12 +1675,18 @@ CellularModuleA7672XX::_scanAvailableOperators(uint32_t timeoutMs) {
         int accessTech = atoi(parts[4].c_str());
 
         if (operatorId > 0) {
-          OperatorInfo opInfo;
-          opInfo.operatorId = operatorId;
-          opInfo.accessTech = accessTech;
-          operators.push_back(opInfo);
-          AG_LOGI(TAG, "Found operator: %" PRIu32 " with AcT: %d (status=%d)",
-                  operatorId, accessTech, status);
+          std::string operatorName = parts[1];
+          if (operatorName.empty()) {
+            operatorName = parts[2];
+          }
+
+          CellularModule::OperatorRecord operatorRecord;
+          operatorRecord.operatorId = operatorId;
+          operatorRecord.accessTech = accessTech;
+          operatorRecord.operatorName = operatorName;
+          operators.push_back(operatorRecord);
+          AG_LOGI(TAG, "Found operator: name=\"%s\", ID=%" PRIu32 ", AcT=%d (status=%d)",
+                  operatorName.c_str(), operatorId, accessTech, status);
         }
       }
     }
@@ -1690,6 +1703,26 @@ CellularModuleA7672XX::_scanAvailableOperators(uint32_t timeoutMs) {
   AG_LOGI(TAG, "Found %zu available operator(s)", operators.size());
   result.status = CellReturnStatus::Ok;
   result.data = operators;
+  return result;
+}
+
+CellResult<std::vector<CellularModuleA7672XX::OperatorInfo>>
+CellularModuleA7672XX::_scanAvailableOperators(uint32_t timeoutMs) {
+  CellResult<std::vector<OperatorInfo>> result;
+
+  auto scanResult = scanAvailableOperators(timeoutMs);
+  result.status = scanResult.status;
+  if (scanResult.status != CellReturnStatus::Ok) {
+    return result;
+  }
+
+  for (const CellularModule::OperatorRecord &operatorRecord : scanResult.data) {
+    OperatorInfo operatorInfo;
+    operatorInfo.operatorId = operatorRecord.operatorId;
+    operatorInfo.accessTech = operatorRecord.accessTech;
+    result.data.push_back(operatorInfo);
+  }
+
   return result;
 }
 

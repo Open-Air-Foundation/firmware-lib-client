@@ -100,6 +100,8 @@ public:
   CellResult<int> retrieveSignal();
   CellResult<std::string> retrieveIPAddr();
   CellReturnStatus isNetworkRegistered(CellTechnology ct);
+  CellResult<std::vector<CellularModule::OperatorRecord>>
+  scanAvailableOperators(uint32_t timeoutMs = 600000);
   CellResult<std::string> startNetworkRegistration(CellTechnology ct, const std::string &apn,
                                                    uint32_t operationTimeoutMs = 90000,
                                                    uint32_t scanTimeoutMs = 600000);

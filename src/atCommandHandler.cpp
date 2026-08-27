@@ -146,7 +146,7 @@ ATCommandHandler::Response ATCommandHandler::waitResponseAndCollect(char *receiv
           }
           if (overflow) {
             AG_LOGW(TAG, "AT response buffer overflow");
-            return CMxError;
+            return Overflow;
           }
           return isOk ? ExpArg1 : (isError ? ExpArg2 : CMxError);
         }
@@ -161,7 +161,7 @@ ATCommandHandler::Response ATCommandHandler::waitResponseAndCollect(char *receiv
 
   if (overflow) {
     AG_LOGW(TAG, "AT response buffer overflow");
-    return CMxError;
+    return Overflow;
   }
   return Timeout;
 }
