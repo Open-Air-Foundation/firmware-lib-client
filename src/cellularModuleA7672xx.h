@@ -47,23 +47,24 @@ private:
 
   // Structure to hold operator information for manual selection
   struct OperatorInfo {
-    uint32_t operatorId;  // Numeric MCC+MNC (e.g., 46001)
-    int accessTech;       // Access technology: 0=GSM, 2=UTRAN, 7=E-UTRAN(LTE)
+    uint32_t operatorId; // Numeric MCC+MNC (e.g., 46001)
+    int accessTech;      // Access technology: 0=GSM, 2=UTRAN, 7=E-UTRAN(LTE)
   };
 
   static constexpr uint32_t MAX_REGISTRATION_FAILURES = 3;
 
   // Operator selection for manual network registration
-  std::vector<OperatorInfo> availableOperators_;  // Persisted operator list with IDs and access tech
-  size_t currentOperatorIndex_ = 0;               // Track position in manual mode
-  uint32_t currentOperatorId_ = 0;                // Current operator PLMN ID (saved successful operator)
-  uint32_t registrationFailCount_ = 0;            // Consecutive registration failures (persisted via setOperators)
+  std::vector<OperatorInfo> availableOperators_; // Persisted operator list with IDs and access tech
+  size_t currentOperatorIndex_ = 0;              // Track position in manual mode
+  uint32_t currentOperatorId_ = 0; // Current operator PLMN ID (saved successful operator)
+  uint32_t registrationFailCount_ =
+      0; // Consecutive registration failures (persisted via setOperators)
 
 public:
   // Structure to hold detailed registration status
   struct RegistrationStatus {
-    int mode;  // URC reporting mode (0 or 1)
-    int stat;  // registration status (0=not searching, 1=registered home, 2=searching, 3=denied, 5=registered roaming, 11=searching/trying)
+    int mode; // URC reporting mode (0 or 1)
+    int stat; // registration status (0=not searching, 1=registered home, 2=searching, 3=denied, 5=registered roaming, 11=searching/trying)
   };
 
   enum NetworkRegistrationState {
@@ -100,6 +101,9 @@ public:
   CellResult<int> retrieveSignal();
   CellResult<std::string> retrieveIPAddr();
   CellReturnStatus isNetworkRegistered(CellTechnology ct);
+  CellReturnStatus prepareOperatorScan(CellTechnology ct, uint32_t timeoutMs = 60000);
+  CellResult<std::vector<CellularModule::OperatorRecord>>
+  scanAvailableOperators(uint32_t timeoutMs = 600000);
   CellResult<std::string> startNetworkRegistration(CellTechnology ct, const std::string &apn,
                                                    uint32_t operationTimeoutMs = 90000,
                                                    uint32_t scanTimeoutMs = 600000);
@@ -142,7 +146,7 @@ private:
   NetworkRegistrationState _implScanOperator(uint32_t scanTimeoutMs);
   NetworkRegistrationState _implConfigureManualNetwork();
   NetworkRegistrationState _implCheckNetworkRegistration(CellTechnology ct,
-                                                          uint32_t manualOperatorStartTime);
+                                                         uint32_t manualOperatorStartTime);
   NetworkRegistrationState _implCheckServiceStatus();
   NetworkRegistrationState _implNetworkReady();
 

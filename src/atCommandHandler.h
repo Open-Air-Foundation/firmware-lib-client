@@ -48,7 +48,7 @@ private:
   AirgradientSerial *agSerial_ = nullptr;
 
 public:
-  enum Response { ExpArg1, ExpArg2, ExpArg3, Timeout, CMxError };
+  enum Response { ExpArg1, ExpArg2, ExpArg3, Timeout, CMxError, Overflow };
 
   ATCommandHandler(AirgradientSerial *agSerial);
   ~ATCommandHandler() {};

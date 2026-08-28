@@ -50,6 +50,13 @@ CellReturnStatus CellularModule::isNetworkRegistered(CellTechnology ct) {
   return CellReturnStatus();
 }
 
+CellResult<std::vector<CellularModule::OperatorRecord>>
+CellularModule::scanAvailableOperators(uint32_t timeoutMs) {
+  CellResult<std::vector<OperatorRecord>> result;
+  result.status = CellReturnStatus::Error;
+  return result;
+}
+
 CellResult<std::string> CellularModule::startNetworkRegistration(CellTechnology ct,
                                                                  const std::string &apn,
                                                                  uint32_t operationTimeoutMs,

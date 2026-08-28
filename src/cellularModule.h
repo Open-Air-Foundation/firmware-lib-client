@@ -29,6 +29,12 @@ enum class CellTechnology { Auto, TWO_G, LTE_M, LTE_NB_IOT, LTE };
 
 class CellularModule {
 public:
+  struct OperatorRecord {
+    uint32_t operatorId;
+    int accessTech;
+    std::string operatorName;
+  };
+
   struct HttpResponse {
     int statusCode;
     std::unique_ptr<char[]> body;
@@ -63,6 +69,10 @@ public:
   virtual uint32_t getCurrentOperatorId() const;
   virtual uint32_t getRegistrationFailCount() const;
   virtual CellReturnStatus isNetworkRegistered(CellTechnology ct);
+
+  // Returned records are transient and may have an empty name.
+  virtual CellResult<std::vector<OperatorRecord>>
+  scanAvailableOperators(uint32_t timeoutMs = 600000);
   virtual CellResult<std::string> startNetworkRegistration(CellTechnology ct,
                                                            const std::string &apn,
                                                            uint32_t operationTimeoutMs = 90000,
