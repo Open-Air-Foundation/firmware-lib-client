@@ -1598,6 +1598,37 @@ CellReturnStatus CellularModuleA7672XX::_activatePDPContext() {
   return CellReturnStatus::Ok;
 }
 
+CellReturnStatus CellularModuleA7672XX::prepareOperatorScan(CellTechnology ct, uint32_t timeoutMs) {
+  if (_mapCellTechToMode(ct) == -1) {
+    return CellReturnStatus::Error;
+  }
+
+  AG_LOGI(TAG, "Preparing module for operator scan");
+  if (!at_->testAT(1000) || isSimReady() != CellReturnStatus::Ok) {
+    return CellReturnStatus::Error;
+  }
+
+  AG_LOGI(TAG, "Waiting for phonebook subsystem readiness");
+  uint32_t startTime = MILLIS();
+  while (1) {
+    at_->sendAT("+CPBS?");
+    if (at_->waitResponse() == ATCommandHandler::ExpArg1) {
+      break;
+    }
+    if ((MILLIS() - startTime) >= timeoutMs) {
+      return CellReturnStatus::Timeout;
+    }
+    DELAY_MS(1000);
+  }
+
+  if (_disableNetworkRegistrationURC(ct) != CellReturnStatus::Ok ||
+      _applyCellularTechnology(ct) != CellReturnStatus::Ok) {
+    return CellReturnStatus::Error;
+  }
+
+  return CellReturnStatus::Ok;
+}
+
 CellResult<std::vector<CellularModule::OperatorRecord>>
 CellularModuleA7672XX::scanAvailableOperators(uint32_t timeoutMs) {
   CellResult<std::vector<CellularModule::OperatorRecord>> result;
