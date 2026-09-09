@@ -63,6 +63,9 @@ public:
   virtual CellResult<int> retrieveSignal();
   virtual CellResult<std::string> retrieveIPAddr();
   virtual CellResult<std::string> resolveDNS(const std::string &hostname);
+  // Synchronize the modem using NTP and return UTC Unix seconds.
+  virtual CellResult<int64_t> retrieveNetworkTime(const std::string &hostname,
+                                                  uint32_t timeoutMs = 60000);
   virtual bool setOperators(const std::string &serialized, uint32_t operatorId,
                             uint32_t registrationFailCount = 0);
   virtual std::string getSerializedOperators() const;

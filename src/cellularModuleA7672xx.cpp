@@ -25,6 +25,53 @@
 #define REGIS_RETRY_DELAY() DELAY_MS(1000);
 #define TIMEOUT_WAIT_REGISTERED 60000
 
+static bool parseClockUtc(const char *clock, int64_t &unixSeconds) {
+  // CCLK: "yy/MM/dd,hh:mm:ss+zz", with timezone in quarter-hours.
+  if (strlen(clock) != 22 || clock[0] != '"' || clock[21] != '"' || clock[3] != '/' ||
+      clock[6] != '/' || clock[9] != ',' || clock[12] != ':' || clock[15] != ':' ||
+      (clock[18] != '+' && clock[18] != '-')) {
+    return false;
+  }
+
+  const int positions[] = {1, 4, 7, 10, 13, 16, 19};
+  int fields[7];
+  for (int i = 0; i < 7; i++) {
+    const char *digits = clock + positions[i];
+    if (digits[0] < '0' || digits[0] > '9' || digits[1] < '0' || digits[1] > '9') {
+      return false;
+    }
+    fields[i] = (digits[0] - '0') * 10 + digits[1] - '0';
+  }
+
+  const int year = 2000 + fields[0];
+  const int month = fields[1];
+  const int day = fields[2];
+  const int hour = fields[3];
+  const int minute = fields[4];
+  const int second = fields[5];
+  const int timezone = fields[6] * (clock[18] == '-' ? -1 : 1);
+  const int monthDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  // CCLK's two-digit year represents 2000-2099, including leap year 2000.
+  const bool leapYear = (year % 4) == 0;
+  if (month < 1 || month > 12 || day < 1 ||
+      day > monthDays[month - 1] + (month == 2 && leapYear ? 1 : 0) || hour > 23 || minute > 59 ||
+      second > 59 || fields[6] > 96) {
+    return false;
+  }
+
+  int days = 0;
+  for (int y = 1970; y < year; y++) {
+    days += 365 + ((y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 1 : 0);
+  }
+  for (int m = 1; m < month; m++) {
+    days += monthDays[m - 1] + (m == 2 && leapYear ? 1 : 0);
+  }
+  days += day - 1;
+  unixSeconds =
+      static_cast<int64_t>(days) * 86400 + hour * 3600 + minute * 60 + second - timezone * 15 * 60;
+  return true;
+}
+
 CellularModuleA7672XX::CellularModuleA7672XX(AirgradientSerial *agSerial, uint32_t warmUpTimeMs) {
   agSerial_ = agSerial;
   _warmUpTimeMs = warmUpTimeMs;
@@ -2204,6 +2251,81 @@ CellResult<std::string> CellularModuleA7672XX::resolveDNS(const std::string &hos
   AG_LOGI(TAG, "DNS resolved %s to %s", hostname.c_str(), ipAddress.c_str());
 
   result.data = ipAddress;
+  result.status = CellReturnStatus::Ok;
+  return result;
+}
+
+CellResult<int64_t> CellularModuleA7672XX::retrieveNetworkTime(const std::string &hostname,
+                                                               uint32_t timeoutMs) {
+  CellResult<int64_t> result = {CellReturnStatus::Error, 0};
+  if (!_initialized || at_ == nullptr || hostname.empty() || hostname.size() > 255 ||
+      timeoutMs == 0) {
+    return result;
+  }
+
+  at_->clearBuffer();
+  char command[272];
+  // Request UTC explicitly; the modem defaults to UTC+8.
+  snprintf(command, sizeof(command), "+CNTP=\"%s\",0", hostname.c_str());
+  at_->sendAT(command);
+  auto response = at_->waitResponse();
+  if (response != ATCommandHandler::ExpArg1) {
+    AG_LOGW(TAG, "Failed to configure NTP server");
+    result.status =
+        response == ATCommandHandler::Timeout ? CellReturnStatus::Timeout : CellReturnStatus::Error;
+    return result;
+  }
+
+  at_->sendAT("+CNTP");
+  // The initial OK only accepts the command. Wait for completion before reading CCLK.
+  response = at_->waitResponse(timeoutMs, "+CNTP:");
+  if (response != ATCommandHandler::ExpArg1) {
+    AG_LOGW(TAG, "NTP synchronization failed or timed out");
+    result.status =
+        response == ATCommandHandler::Timeout ? CellReturnStatus::Timeout : CellReturnStatus::Error;
+    return result;
+  }
+
+  char status[16] = {};
+  if (at_->waitAndRecvRespLine(status, sizeof(status) - 1, 1000) != 1) {
+    result.status = CellReturnStatus::Timeout;
+    return result;
+  }
+  if (strcmp(status, "0") != 0) {
+    AG_LOGW(TAG, "NTP synchronization returned error: %s", status);
+    result.status = CellReturnStatus::Failed;
+    return result;
+  }
+
+  at_->sendAT("+CCLK?");
+  char clockResponse[96] = {};
+  response = at_->waitResponseAndCollect(clockResponse, sizeof(clockResponse), 9000);
+  if (response != ATCommandHandler::ExpArg1) {
+    AG_LOGW(TAG, "Failed to retrieve synchronized modem clock");
+    result.status =
+        response == ATCommandHandler::Timeout ? CellReturnStatus::Timeout : CellReturnStatus::Error;
+    return result;
+  }
+
+  char *clock = strstr(clockResponse, "+CCLK:");
+  if (clock == nullptr) {
+    result.status = CellReturnStatus::Failed;
+    return result;
+  }
+  clock += strlen("+CCLK:");
+  while (*clock == ' ') {
+    clock++;
+  }
+  char *lineEnd = strstr(clock, "\r\n");
+  if (lineEnd != nullptr) {
+    *lineEnd = '\0';
+  }
+  if (!parseClockUtc(clock, result.data)) {
+    AG_LOGW(TAG, "Invalid synchronized modem clock: %s", clock);
+    result.status = CellReturnStatus::Failed;
+    return result;
+  }
+
   result.status = CellReturnStatus::Ok;
   return result;
 }

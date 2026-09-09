@@ -35,6 +35,11 @@ CellResult<std::string> CellularModule::resolveDNS(const std::string &hostname) 
   return CellResult<std::string>();
 }
 
+CellResult<int64_t> CellularModule::retrieveNetworkTime(const std::string &hostname,
+                                                        uint32_t timeoutMs) {
+  return {CellReturnStatus::Error, 0};
+}
+
 bool CellularModule::setOperators(const std::string &serialized, uint32_t operatorId,
                                   uint32_t registrationFailCount) {
   return false;

@@ -127,6 +127,7 @@ public:
                            uint16_t port);
   CellResult<CellularModule::UdpPacket> udpReceive(uint32_t timeout);
   CellResult<std::string> resolveDNS(const std::string &hostname);
+  CellResult<int64_t> retrieveNetworkTime(const std::string &hostname, uint32_t timeoutMs = 60000);
   // Operator serialization/deserialization
   bool setOperators(const std::string &serialized, uint32_t operatorId,
                     uint32_t registrationFailCount = 0);
