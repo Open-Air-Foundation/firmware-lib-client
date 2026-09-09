@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "airgradientServerConfig.h"
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -66,6 +67,8 @@ public:
     union {
       ExtraPayload extra;
     } ext;
+    // UTC Unix seconds at measurement completion; zero means unsynchronized.
+    uint32_t timestamp = 0;
   };
 
   struct AirgradientPayload {
