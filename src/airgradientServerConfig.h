@@ -1,7 +1,7 @@
 #ifndef AIRGRADIENT_SERVER_CONFIG_H
 #define AIRGRADIENT_SERVER_CONFIG_H
 
-#define AIRGRADIENT_HTTP_DOMAIN "hw.airgradient.com"
+#define AIRGRADIENT_HTTP_DOMAIN "hw-ec.airgradient.com"
 
 namespace AirgradientServerConfig {
 
