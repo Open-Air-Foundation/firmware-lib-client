@@ -42,7 +42,7 @@ static bool getSharedPresenceMaskForBatch(const EncoderContext &ctx,
 
 static uint32_t calculateSensorDataSizeForMask(const PresenceMask &mask) {
   uint32_t size = 0;
-  for (uint8_t flag = 0; flag <= (uint8_t)FLAG_SIGNAL; flag++) {
+  for (uint8_t flag = 0; flag <= (uint8_t)FLAG_TIMESTAMP; flag++) {
     if (!isBitSet64(&mask, flag)) {
       continue;
     }
@@ -53,7 +53,8 @@ static uint32_t calculateSensorDataSizeForMask(const PresenceMask &mask) {
     }
 
     if (flag == (uint8_t)FLAG_O3_WE || flag == (uint8_t)FLAG_O3_AE ||
-        flag == (uint8_t)FLAG_NO2_WE || flag == (uint8_t)FLAG_NO2_AE) {
+        flag == (uint8_t)FLAG_NO2_WE || flag == (uint8_t)FLAG_NO2_AE ||
+        flag == (uint8_t)FLAG_TIMESTAMP) {
       size += 4;
       continue;
     }
@@ -133,8 +134,8 @@ int32_t PayloadEncoder::encodeSensorData(uint8_t *buffer, uint32_t buffer_size,
                                          const PresenceMask &mask) const {
   uint32_t offset = 0;
 
-  // Iterate through flags in order (0-63, currently defined up to FLAG_SIGNAL)
-  for (uint8_t flag = 0; flag <= (uint8_t)FLAG_SIGNAL; flag++) {
+  // Iterate through defined flags in ascending presence-bit order.
+  for (uint8_t flag = 0; flag <= (uint8_t)FLAG_TIMESTAMP; flag++) {
     if (!isBitSet64(&mask, flag)) {
       continue; // Skip if flag not set
     }
@@ -349,6 +350,13 @@ int32_t PayloadEncoder::encodeSensorData(uint8_t *buffer, uint32_t buffer_size,
         return -1;
       buffer[offset] = (uint8_t)reading.signal;
       offset += 1;
+      break;
+
+    case FLAG_TIMESTAMP:
+      if (offset + 4 > buffer_size)
+        return -1;
+      writeUint32(&buffer[offset], reading.timestamp);
+      offset += 4;
       break;
     }
   }

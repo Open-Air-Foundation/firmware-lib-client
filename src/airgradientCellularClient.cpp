@@ -1030,6 +1030,11 @@ bool AirgradientCellularClient::_encodeBinaryPayload(const AirgradientPayload &p
 
     const PayloadBuffer &buf = payload.payloadBuffer[i];
 
+    if (buf.timestamp != 0) {
+      setFlag(&reading, FLAG_TIMESTAMP);
+      reading.timestamp = buf.timestamp;
+    }
+
     // Common sensors
     if (IS_CO2_VALID(buf.common.rco2)) {
       setFlag(&reading, FLAG_CO2);

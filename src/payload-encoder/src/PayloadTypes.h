@@ -16,7 +16,7 @@
 #define MAX_BATCH_SIZE 100
 
 // Payload schema version
-#define AG_PAYLOAD_VERSION 0
+#define AG_PAYLOAD_VERSION 1
 
 // Metadata bit layout
 // - Bits 0-4: VERSION
@@ -61,7 +61,8 @@ typedef enum {
   FLAG_NO2_WE = 26,
   FLAG_NO2_AE = 27,
   FLAG_AFE_TEMP = 28,
-  FLAG_SIGNAL = 29
+  FLAG_SIGNAL = 29,
+  FLAG_TIMESTAMP = 30
 } SensorFlag;
 
 // Helper to check if a bit is set in a 64-bit mask
@@ -106,6 +107,8 @@ typedef struct {
   uint32_t no2_ae;   // NO2 Aux Electrode (mV/Raw)
   uint16_t afe_temp; // AFE Chip Temperature * 10
   int8_t signal;     // Signal strength (dBm)
+
+  uint32_t timestamp; // UTC Unix seconds at measurement completion
 } SensorReading;
 
 // Payload header (Byte 1: Interval). Byte 0 (Metadata) is derived by encoder.
