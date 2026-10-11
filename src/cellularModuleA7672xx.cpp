@@ -999,6 +999,13 @@ CellResult<CellularModule::UdpPacket> CellularModuleA7672XX::udpReceive(uint32_t
   // Get the <data_len>
   memset(buf, 0, 32);
   at_->waitAndRecvRespLine(buf, 32);
+  // Complete the length query before issuing another command.
+  if (at_->waitResponse(9000) != ATCommandHandler::ExpArg1) {
+    AG_LOGE(TAG, "Error waiting for CIPRXGET=4 completion");
+    result.status = CellReturnStatus::Error;
+    return result;
+  }
+
   char *end;
   int udpPacketSize = 0;
   udpPacketSize = strtol(buf, &end, 10);
@@ -1061,6 +1068,15 @@ CellResult<CellularModule::UdpPacket> CellularModuleA7672XX::udpReceive(uint32_t
       AG_LOGE(TAG, "Failed retrieve UDP chunk. Expected: %d, Received: %d", readLen,
               receivedActual);
       result.status = CellReturnStatus::Failed;
+      delete[] udpPacket;
+      delete[] chunkBuf;
+      return result;
+    }
+
+    // Complete the chunk read before continuing or returning the packet.
+    if (at_->waitResponse(5000) != ATCommandHandler::ExpArg1) {
+      AG_LOGE(TAG, "Error waiting for CIPRXGET=2 completion");
+      result.status = CellReturnStatus::Error;
       delete[] udpPacket;
       delete[] chunkBuf;
       return result;
