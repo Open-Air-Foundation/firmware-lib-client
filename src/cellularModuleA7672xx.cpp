@@ -11,6 +11,7 @@
 #include "freertos/projdefs.h"
 #include "cellularModuleA7672xx.h"
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <new>
 #include <cstring>
@@ -196,17 +197,26 @@ CellResult<int> CellularModuleA7672XX::retrieveSignal() {
     return result;
   }
 
+  // Consume the final OK before returning any parsing error.
+  at_->waitResponse();
+
   // TODO: Make common function to seperate two values by comma
   int signal = 99;
   size_t pos = received.find(",");
   if (pos != std::string::npos) {
     // Ignore <ber> value, only <rssi>
     std::string signalStr = received.substr(0, pos);
-    signal = std::stoi(signalStr);
+    char *end;
+    long parsed = strtol(signalStr.c_str(), &end, 10);
+    bool parsedComplete = end != signalStr.c_str() && *end == '\0';
+    bool validCsq = (parsed >= 0 && parsed <= 31) || parsed == 99;
+    if (!parsedComplete || !validCsq) {
+      AG_LOGW(TAG, "Invalid CSQ RSSI: %s", signalStr.c_str());
+      result.status = CellReturnStatus::Error;
+      return result;
+    }
+    signal = static_cast<int>(parsed);
   }
-
-  // receive OK response from the buffer, ignore it
-  at_->waitResponse();
 
   result.status = CellReturnStatus::Ok;
   result.data = signal;
