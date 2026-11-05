@@ -10,8 +10,6 @@
 #ifndef ESP8266
 
 #include "airgradientCellularClient.h"
-#include <sstream>
-#include <iomanip>
 #include <algorithm>
 #include <memory>
 #include <new>
@@ -53,11 +51,12 @@ static void logBinaryPayloadHexPreview(const char *tag, const std::vector<uint8_
     return;
   }
 
-  std::ostringstream oss;
-  oss << std::hex << std::uppercase;
+  AgPayloadStream oss;
 
   const auto appendByte = [&](uint8_t b) {
-    oss << std::setfill('0') << std::setw(2) << static_cast<int>(b);
+    char hex[3];
+    snprintf(hex, sizeof(hex), "%02X", b);
+    oss << hex;
   };
 
   const auto appendRange = [&](size_t from, size_t to) {
@@ -256,7 +255,7 @@ bool AirgradientCellularClient::httpPostMeasures(const std::string &payload) {
 
 bool AirgradientCellularClient::httpPostMeasures(const AirgradientPayload &payload) {
   // Build payload using oss, easier to manage if there's an invalid value that should not included
-  std::ostringstream oss;
+  AgPayloadStream oss;
 
   // Add interval at the first position
   oss << payload.measureInterval;
@@ -338,7 +337,7 @@ bool AirgradientCellularClient::mqttPublishMeasures(const std::string &payload) 
 
 bool AirgradientCellularClient::mqttPublishMeasures(const AirgradientPayload &payload) {
   // Build payload using oss, easier to manage if there's an invalid value that should not included
-  std::ostringstream oss;
+  AgPayloadStream oss;
 
   // Add interval at the first position
   oss << payload.measureInterval;
@@ -852,7 +851,7 @@ void AirgradientCellularClient::_generateTokenMessageId(uint8_t token[2], uint16
   *messageId = (uint16_t)((r >> 16) & 0xFFFF);
 }
 
-void AirgradientCellularClient::_serialize(std::ostringstream &oss, int signal,
+void AirgradientCellularClient::_serialize(AgPayloadStream &oss, int signal,
                                            const PayloadBuffer &payloadBuffer) {
   // CO2
   if (IS_CO2_VALID(payloadBuffer.common.rco2)) {
