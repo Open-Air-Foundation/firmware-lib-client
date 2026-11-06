@@ -9,48 +9,6 @@
 #define AIRGRADIENT_CELLULAR_CLIENT_H
 
 #include <cstddef>
-#include <cstdio>
-#include <string>
-#include <type_traits>
-
-/**
- * Builds payload text the way std::ostream formats values by default
- * (%g for floating point, decimal for integers), without std::ostringstream.
- * iostream pulls the libstdc++ locale support into the firmware, about 180 KB
- * of flash on ESP32-C3 with arduino-esp32 3.x.
- */
-class AgPayloadStream {
-public:
-  AgPayloadStream &operator<<(const char *v) {
-    s_ += v;
-    return *this;
-  }
-  AgPayloadStream &operator<<(const std::string &v) {
-    s_ += v;
-    return *this;
-  }
-  AgPayloadStream &operator<<(char v) {
-    s_ += v;
-    return *this;
-  }
-  AgPayloadStream &operator<<(double v) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%g", v);
-    s_ += buf;
-    return *this;
-  }
-  AgPayloadStream &operator<<(float v) { return *this << static_cast<double>(v); }
-  template <typename T, typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
-  AgPayloadStream &operator<<(T v) {
-    s_ += std::to_string(v);
-    return *this;
-  }
-  const std::string &str() const { return s_; }
-
-private:
-  std::string s_;
-};
-
 #ifndef ESP8266
 
 #include <string>
@@ -102,7 +60,6 @@ public:
 
  private:
   std::string _getEndpoint();
-  void _serialize(AgPayloadStream &oss, int signal, const PayloadBuffer &payloadBuffer);
   bool _encodeBinaryPayload(const AirgradientPayload &payload, std::vector<uint8_t> &out);
 
   CoapPacket::CoapError _buildCoapPostPacket(std::vector<uint8_t> &outPacket,

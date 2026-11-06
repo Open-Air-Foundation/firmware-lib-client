@@ -62,7 +62,6 @@ CoapBuilder& CoapBuilder::setUriPath(const std::string& path) {
         pathCopy = pathCopy.substr(1);
     }
 
-    // Split on '/' without std::stringstream, which pulls in iostream and locale.
     size_t start = 0;
     while (start <= pathCopy.size()) {
         size_t end = pathCopy.find('/', start);
