@@ -310,16 +310,18 @@ bool AirgradientCellularClient::httpPostMeasures(const AirgradientPayload &paylo
 bool AirgradientCellularClient::mqttConnect() { return mqttConnect(mqttDomain, mqttPort); }
 
 bool AirgradientCellularClient::mqttConnect(const char *uri) {
+  if (uri == nullptr) {
+    AG_LOGE(TAG, "MQTT URI is null");
+    return false;
+  }
   // Get connection properties from uri; Eg: mqtt://username:password@mqttbroker.com:1883
   std::string protocol;
   std::string username;
   std::string password;
   std::string host;
   int port = -1;
-  Common::parseUri(uri, protocol, username, password, host, port);
-
-  if (host.empty()) {
-    AG_LOGE(TAG, "MQTT host or port is empty");
+  if (!Common::parseUri(uri, protocol, username, password, host, port)) {
+    AG_LOGE(TAG, "Invalid MQTT URI");
     return false;
   }
 
