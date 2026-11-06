@@ -73,12 +73,12 @@ int DFRobot_IICSerial::begin(long unsigned baud, uint8_t format, eCommunicationM
   uint8_t channel = subSerialChnnlSwitch(SUBUART_CHANNEL_1);
   if (readReg(REG_WK2132_GENA, &val, 1) != 1) {
     DBG("READ BYTEERROR!");
-    return ERR_READ;
+    return IICSERIAL_ERR_READ;
   }
 #ifndef ARDUINO_ARCH_NRF5
   if ((val & 0x80) == 0) {
     DBG("Read REG_WK2132_GENA  ERROR!");
-    return ERR_REGDATA;
+    return IICSERIAL_ERR_REGDATA;
   }
 #endif
   subSerialChnnlSwitch(channel);
@@ -86,7 +86,7 @@ int DFRobot_IICSerial::begin(long unsigned baud, uint8_t format, eCommunicationM
   DBG("OK");
   setSubSerialBaudRate(baud);
   setSubSerialConfigReg(format, mode, opt);
-  return ERR_OK;
+  return IICSERIAL_ERR_OK;
 }
 
 void DFRobot_IICSerial::end() { subSerialGlobalRegEnable(_subSerialChannel, rst); }
