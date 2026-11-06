@@ -242,10 +242,9 @@ std::string AirgradientCellularClient::httpFetchConfig() {
     return {};
   }
 
-  AG_LOGI(TAG, "Received configuration: (%d) %s", result.data.bodyLen, result.data.body.get());
-
   // Move the string from unique_ptr
   std::string body = std::string(result.data.body.get());
+  logReceivedConfiguration(TAG, body);
 
   AG_LOGI(TAG, "Success fetch configuration from server, still needs to be parsed and validated");
 
@@ -445,7 +444,7 @@ std::string AirgradientCellularClient::coapFetchConfig(bool keepConnection) {
   }
 
   std::string response(responsePacket.payload.begin(), responsePacket.payload.end());
-  AG_LOGI(TAG, "Received configuration: (%d) %s", response.length(), response.c_str());
+  logReceivedConfiguration(TAG, response);
 
   // Set state to succeed
   lastFetchConfigSucceed = true;

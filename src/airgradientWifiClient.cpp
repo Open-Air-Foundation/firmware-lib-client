@@ -91,7 +91,7 @@ std::string AirgradientWifiClient::httpFetchConfig() {
     return responseBody;
   }
 
-  AG_LOGI(TAG, "Received configuration: (%d) %s", responseBody.length(), responseBody.c_str());
+  logReceivedConfiguration(TAG, responseBody);
 
   // Set success state flag
   registeredOnAgServer = true;

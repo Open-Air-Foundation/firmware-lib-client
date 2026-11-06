@@ -126,6 +126,7 @@ protected:
   std::string buildFetchConfigUrl(bool useHttps = false);
   std::string buildPostMeasuresUrl(bool useHttps = false);
   std::string buildMqttTopicPublishMeasures();
+  static void logReceivedConfiguration(const char *tag, const std::string &config);
 
   std::string serialNumber;
   bool lastPostMeasuresSucceed = true;
