@@ -74,9 +74,9 @@ public:
   #define SUBUART_CHANNEL_ALL  0x11    //< All sub channels
   #define IIC_ADDR_FIXED       0x10    //< The 4th and 3rd bits of IIC address are fixed, value 1 and 0 respectively
 
-  #define ERR_OK                0
-  #define ERR_REGDATA          -1
-  #define ERR_READ             -2
+  #define IICSERIAL_ERR_OK       0
+  #define IICSERIAL_ERR_REGDATA -1
+  #define IICSERIAL_ERR_READ    -2
   #define FOSC                 14745600L//< External cystal frequency 14.7456MHz
   #define OBJECT_REGISTER      0x00     //< Register object
   #define OBJECT_FIFO          0x01     //< FIFO buffer object
