@@ -16,6 +16,3 @@ Client library to communication with the AirGradient backend through WiFi or Cel
 - **Unsupported:** TLS, IPv6, whitespace, paths, queries and fragments.
 
 Invalid input returns failure before connecting. Example: `mqtt://user:password@broker.example.com:1883`.
-
-For future ESP-MQTT callers, `Common::normalizeMqttUri(uri)` validates the URI and adds a missing
-`mqtt://` prefix. Wi-Fi MQTT is not yet implemented.
