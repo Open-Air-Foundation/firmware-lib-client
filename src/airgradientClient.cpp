@@ -6,28 +6,8 @@
  */
 
 #include "airgradientClient.h"
-#include "agLogger.h"
 #include "common.h"
-#include <ArduinoJson.h>
 #include <string>
-
-void AirgradientClient::logReceivedConfiguration(const char *tag, const std::string &config) {
-  // Parse a logging copy; callers still receive the original configuration.
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, config.c_str(), config.size());
-  if (error) {
-    AG_LOGW(tag, "Received configuration (%u bytes): %s", (unsigned)config.size(), error.c_str());
-    return;
-  }
-  if (!doc.is<JsonObject>()) {
-    AG_LOGW(tag, "Received configuration (%u bytes): expected JSON object", (unsigned)config.size());
-    return;
-  }
-  doc.as<JsonObject>().remove("mqttBrokerUrl");
-  std::string sanitized;
-  serializeJson(doc, sanitized);
-  AG_LOGI(tag, "Received configuration: (%u) %s", (unsigned)config.size(), sanitized.c_str());
-}
 
 bool AirgradientClient::begin(std::string sn, PayloadType pt) { return true; }
 
