@@ -8,7 +8,6 @@
 #ifndef AIRGRADIENT_CELLULAR_CLIENT_H
 #define AIRGRADIENT_CELLULAR_CLIENT_H
 
-#include <sstream>
 #include <cstddef>
 #ifndef ESP8266
 
@@ -61,7 +60,6 @@ public:
 
  private:
   std::string _getEndpoint();
-  void _serialize(std::ostringstream &oss, int signal, const PayloadBuffer &payloadBuffer);
   bool _encodeBinaryPayload(const AirgradientPayload &payload, std::vector<uint8_t> &out);
 
   CoapPacket::CoapError _buildCoapPostPacket(std::vector<uint8_t> &outPacket,

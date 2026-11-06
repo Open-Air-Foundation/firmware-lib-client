@@ -7,7 +7,7 @@
 
 #include "CoapBuilder.h"
 #include <cstring>
-#include <sstream>
+#include <string>
 
 namespace CoapPacket {
 
@@ -62,12 +62,16 @@ CoapBuilder& CoapBuilder::setUriPath(const std::string& path) {
         pathCopy = pathCopy.substr(1);
     }
 
-    std::stringstream ss(pathCopy);
-    std::string segment;
-    while (std::getline(ss, segment, '/')) {
-        if (!segment.empty()) {
-            addUriPathSegment(segment);
+    size_t start = 0;
+    while (start <= pathCopy.size()) {
+        size_t end = pathCopy.find('/', start);
+        if (end == std::string::npos) {
+            end = pathCopy.size();
         }
+        if (end > start) {
+            addUriPathSegment(pathCopy.substr(start, end - start));
+        }
+        start = end + 1;
     }
     return *this;
 }

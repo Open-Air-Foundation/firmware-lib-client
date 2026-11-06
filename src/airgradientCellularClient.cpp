@@ -10,8 +10,6 @@
 #ifndef ESP8266
 
 #include "airgradientCellularClient.h"
-#include <sstream>
-#include <iomanip>
 #include <algorithm>
 #include <memory>
 #include <new>
@@ -31,6 +29,9 @@
 
 #include "esp_random.h"
 
+#include <cstdio>
+#include <string>
+
 
 #define ONE_OPENAIR_POST_MEASURES_ENDPOINT "cts"
 #define OPENAIR_MAX_POST_MEASURES_ENDPOINT "cvn"
@@ -40,6 +41,36 @@
 #define POST_MEASURES_ENDPOINT OPENAIR_MAX_POST_MEASURES_ENDPOINT
 #endif
 
+/**
+ * Builds the measures payload as text. Integers are written in decimal,
+ * floating point values in their shortest form ("%g").
+ */
+class AgPayloadStream {
+public:
+  AgPayloadStream &operator<<(const char *text) {
+    buffer_ += text;
+    return *this;
+  }
+  AgPayloadStream &operator<<(int value) {
+    buffer_ += std::to_string(value);
+    return *this;
+  }
+  AgPayloadStream &operator<<(double value) {
+    char text[32];
+    snprintf(text, sizeof(text), "%g", value);
+    buffer_ += text;
+    return *this;
+  }
+  const std::string &str() const { return buffer_; }
+
+private:
+  std::string buffer_;
+};
+
+static void serializeMeasures(AgPayloadStream &oss, int signal,
+                              const AirgradientClient::PayloadBuffer &payloadBuffer,
+                              AirgradientClient::PayloadType payloadType,
+                              bool extendedPmMeasures);
 
 static void logBinaryPayloadHexPreview(const char *tag, const std::vector<uint8_t> &payload,
                                        size_t previewBytes) {
@@ -53,11 +84,12 @@ static void logBinaryPayloadHexPreview(const char *tag, const std::vector<uint8_
     return;
   }
 
-  std::ostringstream oss;
-  oss << std::hex << std::uppercase;
+  AgPayloadStream oss;
 
   const auto appendByte = [&](uint8_t b) {
-    oss << std::setfill('0') << std::setw(2) << static_cast<int>(b);
+    char hex[3];
+    snprintf(hex, sizeof(hex), "%02X", b);
+    oss << hex;
   };
 
   const auto appendRange = [&](size_t from, size_t to) {
@@ -256,7 +288,7 @@ bool AirgradientCellularClient::httpPostMeasures(const std::string &payload) {
 
 bool AirgradientCellularClient::httpPostMeasures(const AirgradientPayload &payload) {
   // Build payload using oss, easier to manage if there's an invalid value that should not included
-  std::ostringstream oss;
+  AgPayloadStream oss;
 
   // Add interval at the first position
   oss << payload.measureInterval;
@@ -265,7 +297,8 @@ bool AirgradientCellularClient::httpPostMeasures(const AirgradientPayload &paylo
     // Seperator between measures cycle
     oss << ",";
     // Serialize each measurement
-    _serialize(oss, payload.signal, payload.payloadBuffer[i]);
+    serializeMeasures(oss, payload.signal, payload.payloadBuffer[i], payloadType,
+                      _extendedPmMeasures);
   }
 
   // Compile it
@@ -338,7 +371,7 @@ bool AirgradientCellularClient::mqttPublishMeasures(const std::string &payload) 
 
 bool AirgradientCellularClient::mqttPublishMeasures(const AirgradientPayload &payload) {
   // Build payload using oss, easier to manage if there's an invalid value that should not included
-  std::ostringstream oss;
+  AgPayloadStream oss;
 
   // Add interval at the first position
   oss << payload.measureInterval;
@@ -347,7 +380,8 @@ bool AirgradientCellularClient::mqttPublishMeasures(const AirgradientPayload &pa
     // Seperator between measures cycle
     oss << ",";
     // Serialize each measurement
-    _serialize(oss, payload.signal, payload.payloadBuffer[i]);
+    serializeMeasures(oss, payload.signal, payload.payloadBuffer[i], payloadType,
+                      _extendedPmMeasures);
   }
 
   // Compile it
@@ -852,8 +886,10 @@ void AirgradientCellularClient::_generateTokenMessageId(uint8_t token[2], uint16
   *messageId = (uint16_t)((r >> 16) & 0xFFFF);
 }
 
-void AirgradientCellularClient::_serialize(std::ostringstream &oss, int signal,
-                                           const PayloadBuffer &payloadBuffer) {
+static void serializeMeasures(AgPayloadStream &oss, int signal,
+                              const AirgradientClient::PayloadBuffer &payloadBuffer,
+                              AirgradientClient::PayloadType payloadType,
+                              bool extendedPmMeasures) {
   // CO2
   if (IS_CO2_VALID(payloadBuffer.common.rco2)) {
     oss << std::round(payloadBuffer.common.rco2);
@@ -923,7 +959,8 @@ void AirgradientCellularClient::_serialize(std::ostringstream &oss, int signal,
   oss << signal;
 
   // Only continue for MAX model
-  if (payloadType == MAX_WITH_O3_NO2 || payloadType == MAX_WITHOUT_O3_NO2) {
+  if (payloadType == AirgradientClient::MAX_WITH_O3_NO2 ||
+      payloadType == AirgradientClient::MAX_WITHOUT_O3_NO2) {
     oss << ",";
     // V Battery
     if (IS_VOLT_VALID(payloadBuffer.ext.extra.vBat)) {
@@ -935,7 +972,7 @@ void AirgradientCellularClient::_serialize(std::ostringstream &oss, int signal,
       oss << std::round(payloadBuffer.ext.extra.vPanel * 100);
     }
 
-    if (payloadType == MAX_WITH_O3_NO2) {
+    if (payloadType == AirgradientClient::MAX_WITH_O3_NO2) {
       oss << ",";
       // Working Electrode O3
       if (IS_VOLT_VALID(payloadBuffer.ext.extra.o3WorkingElectrode)) {
@@ -964,7 +1001,7 @@ void AirgradientCellularClient::_serialize(std::ostringstream &oss, int signal,
     }
   }
 
-  if (!_extendedPmMeasures) {
+  if (!extendedPmMeasures) {
     return;
   }
 
