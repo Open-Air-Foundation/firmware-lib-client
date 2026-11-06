@@ -11,6 +11,7 @@
 #include "freertos/projdefs.h"
 #include "cellularModuleA7672xx.h"
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <new>
@@ -704,7 +705,38 @@ CellularModuleA7672XX::httpPost(const std::string &url, const std::string &body,
 CellReturnStatus CellularModuleA7672XX::mqttConnect(const std::string &clientId,
                                                     const std::string &host, int port,
                                                     std::string username, std::string password) {
+  if (!Common::isValidMqttHost(host) || port < 1 || port > 65535 ||
+      (!username.empty() && !Common::isValidMqttCredential(username)) ||
+      (!password.empty() && !Common::isValidMqttCredential(password)) ||
+      (username.empty() && !password.empty())) {
+    AG_LOGE(TAG, "Invalid MQTT host, port or credentials");
+    return CellReturnStatus::Error;
+  }
   char buf[200] = {0};
+  // 165 URI characters + 34 command overhead + 5 for an omitted :1883 + NUL.
+  char connectCommand[205] = {0};
+  // Validate complete commands before starting MQTT; never send truncated credentials.
+  int length = snprintf(buf, sizeof(buf), "+CMQTTACCQ=0,\"%s\",0", clientId.c_str());
+  if (length < 0 || static_cast<size_t>(length) >= sizeof(buf)) {
+    AG_LOGE(TAG, "MQTT client ID exceeds command buffer");
+    return CellReturnStatus::Error;
+  }
+  if (!username.empty() && !password.empty()) {
+    length = snprintf(connectCommand, sizeof(connectCommand),
+                      "+CMQTTCONNECT=0,\"tcp://%s:%d\",120,1,\"%s\",\"%s\"", host.c_str(), port,
+                      username.c_str(), password.c_str());
+  } else if (!username.empty()) {
+    length = snprintf(connectCommand, sizeof(connectCommand),
+                      "+CMQTTCONNECT=0,\"tcp://%s:%d\",120,1,\"%s\"", host.c_str(), port,
+                      username.c_str());
+  } else {
+    length = snprintf(connectCommand, sizeof(connectCommand),
+                      "+CMQTTCONNECT=0,\"tcp://%s:%d\",120,1", host.c_str(), port);
+  }
+  if (length < 0 || static_cast<size_t>(length) >= sizeof(connectCommand)) {
+    AG_LOGE(TAG, "MQTT connection parameters exceed command buffer");
+    return CellReturnStatus::Error;
+  }
   std::string result;
 
   // +CMQTTSTART
@@ -732,7 +764,6 @@ CellReturnStatus CellularModuleA7672XX::mqttConnect(const std::string &clientId,
   }
 
   // +CMQTTACCQ
-  sprintf(buf, "+CMQTTACCQ=0,\"%s\",0", clientId.c_str());
   at_->sendAT(buf);
   if (at_->waitResponse() != ATCommandHandler::ExpArg1) {
     // ERROR or TIMEOUT, doesn't matter
@@ -743,22 +774,7 @@ CellReturnStatus CellularModuleA7672XX::mqttConnect(const std::string &clientId,
 
   // +CMQTTCONNECT
   // keep alive 120; cleansession 1
-  memset(buf, 0, 200);
-  if (username != "" && password != "") {
-    // Both username and password provided
-    AG_LOGI(TAG, "Connect with username and password");
-    sprintf(buf, "+CMQTTCONNECT=0,\"tcp://%s:%d\",120,1,\"%s\",\"%s\"", host.c_str(), port,
-            username.c_str(), password.c_str());
-  } else if (username != "") {
-    // Only username that is provided
-    AG_LOGI(TAG, "Connect with username only");
-    sprintf(buf, "+CMQTTCONNECT=0,\"tcp://%s:%d\",120,1,\"%s\"", host.c_str(), port,
-            username.c_str());
-  } else {
-    // No credentials
-    sprintf(buf, "+CMQTTCONNECT=0,\"tcp://%s:%d\",120,1", host.c_str(), port);
-  }
-  at_->sendAT(buf);
+  at_->sendAT(connectCommand);
   if (at_->waitResponse(30000, "+CMQTTCONNECT: 0,") != ATCommandHandler::ExpArg1) {
     at_->clearBuffer();
     return CellReturnStatus::Error;
